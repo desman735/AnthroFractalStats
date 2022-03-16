@@ -1,8 +1,15 @@
-import sys
+from dynaconf import Dynaconf
 from pytumblr import TumblrRestClient
 
-key = sys.argv[1]
-post = sys.argv[2]
+config = Dynaconf(
+    settings_files=[
+        "config.toml"
+    ]
+)
+
+key = config.tumblr_key
+post = config.tumblr_post_link
+
 post = post.removeprefix("https://")
 blog, post = post.split('/', 1)
 post = post.removeprefix("post/")
