@@ -1,3 +1,5 @@
+import re
+
 from dynaconf import Dynaconf
 from pytumblr import TumblrRestClient
 
@@ -40,42 +42,48 @@ client = TumblrRestClient(key)
 post_notes = client.notes(blogname=blog, id=post_id)
 
 replies = dict()
-replies_authors = set()
-ignored_authors = set()
 
 for reply in reply_iter(post_notes):
     reply_author = reply['blog_name']
     reply_text = reply['reply_text']
 
-    if reply_text not in replies:
-        replies[reply_text] = set()
-    replies[reply_text].add(reply_author)
+    if reply_author in replies:
+        replies[reply_author] += "\n"
+        replies[reply_author] += reply_text
+    else:
+        replies[reply_author] = reply_text
 
-    if reply_author in replies_authors:
-        ignored_authors.add(reply_author)
+choices = config.choices
+regexes = dict()
+defined_replies = dict()
+undefined_replies = []
 
-    replies_authors.add(reply_author)
+for name, keywords in choices.items():
+    defined_replies[name] = list()
+    for keyword in keywords:
+        assert keyword not in regexes
+        regexes[keyword] = re.compile(rf"\b{keyword}\b", re.IGNORECASE)
 
-ignored_replies = {}
+for author, reply in replies.items():
+    reply_options = list()
+    for name, keywords in choices.items():
+        for keyword in keywords:
+            if regexes[keyword].search(reply):
+                reply_options.append(name)
+                break
 
-# remove people, who answered few times, from the replies
-for reply, authors in replies.items():
-    authors: list
+    if len(reply_options) == 1:
+        defined_replies[reply_options[0]].append((reply, author))
+    else:
+        undefined_replies.append((reply, author))
 
-    for author in ignored_authors:
-        if author in authors:
-            authors.remove(author)
-
-            if author not in ignored_replies:
-                ignored_replies[author] = set()
-            ignored_replies[author].add(reply)
 
 print("Results:")
-for reply, authors in sorted(replies.items(), key=lambda reply_data: len(reply_data[1]), reverse=True):
-    if authors:
-        print(f'{len(authors)} - {format_reply(reply)}')
+for choice, replies in defined_replies.items():
+    if replies:
+        print(f'{choice}: {len(replies)}')
 
-print("\nIgnored authors:")
-for author, replies in ignored_replies.items():
-    replies = '\n'.join(map(format_reply, replies))
-    print(f"{author}:\n{replies}\n")
+if undefined_replies:
+    print("\nUndefined replies:")
+    for reply, author in undefined_replies:
+        print(f"{author}:\n{format_reply(reply)}\n")
