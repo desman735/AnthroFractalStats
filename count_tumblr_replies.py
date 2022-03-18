@@ -1,6 +1,27 @@
 from dynaconf import Dynaconf
 from pytumblr import TumblrRestClient
 
+
+def reply_iter(notes):
+    total_notes = notes['total_notes']
+    handled_notes = 0
+    while handled_notes < total_notes:
+        for note in notes['notes']:
+            last_handled_timestamp = note['timestamp']
+            if note['type'] != 'reply':
+                continue
+            yield note
+
+        handled_notes += len(notes['notes'])
+        if handled_notes < total_notes:
+            notes = client.notes(blogname=blog, id=post_id, before_timestamp=last_handled_timestamp)
+
+
+def format_reply(line: str) -> str:
+    line = line.replace("\n", " ⮒ ")
+    return f'"{line}"'
+
+
 config = Dynaconf(
     settings_files=[
         "config.toml"
@@ -16,41 +37,24 @@ post = post.removeprefix("post/")
 post_id = post.split('/')[0]
 
 client = TumblrRestClient(key)
-notes = client.notes(blogname=blog, id=post_id)
-total_notes = notes['total_notes']
-handled_notes = 0
+post_notes = client.notes(blogname=blog, id=post_id)
 
 replies = dict()
 replies_authors = set()
 ignored_authors = set()
 
+for reply in reply_iter(post_notes):
+    reply_author = reply['blog_name']
+    reply_text = reply['reply_text']
 
-def format_reply(line: str) -> str:
-    line = line.replace("\n", " ⮒ ")
-    return f'"{line}"'
+    if reply_text not in replies:
+        replies[reply_text] = set()
+    replies[reply_text].add(reply_author)
 
+    if reply_author in replies_authors:
+        ignored_authors.add(reply_author)
 
-while handled_notes < total_notes:
-    for note in notes['notes']:
-        last_handled_timestamp = note['timestamp']
-        if note['type'] != 'reply':
-            continue
-
-        reply_author = note['blog_name']
-        reply_text = note['reply_text']
-
-        if reply_text not in replies:
-            replies[reply_text] = set()
-        replies[reply_text].add(reply_author)
-
-        if reply_author in replies_authors:
-            ignored_authors.add(reply_author)
-
-        replies_authors.add(reply_author)
-
-    handled_notes += len(notes['notes'])
-    if handled_notes < total_notes:
-        notes = client.notes(blogname=blog, id=post_id, before_timestamp=last_handled_timestamp)
+    replies_authors.add(reply_author)
 
 ignored_replies = {}
 
