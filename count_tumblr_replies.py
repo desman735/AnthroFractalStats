@@ -4,15 +4,15 @@ from dynaconf import Dynaconf
 from pytumblr import TumblrRestClient
 
 
-def reply_iter(notes):
+def notes_iter(tumblr_client, blogname, notes_post_id, filter_type):
+    notes = tumblr_client.notes(blogname=blogname, id=notes_post_id)
     total_notes = notes['total_notes']
     handled_notes = 0
     while handled_notes < total_notes:
         for note in notes['notes']:
             last_handled_timestamp = note['timestamp']
-            if note['type'] != 'reply':
-                continue
-            yield note
+            if note['type'] == filter_type:
+                yield note
 
         handled_notes += len(notes['notes'])
         if handled_notes < total_notes:
@@ -39,11 +39,11 @@ post = post.removeprefix("post/")
 post_id = post.split('/')[0]
 
 client = TumblrRestClient(key)
-post_notes = client.notes(blogname=blog, id=post_id)
 
 replies = dict()
 
-for reply in reply_iter(post_notes):
+print("Counting replies...")
+for reply in notes_iter(client, blog, post_id, 'reply'):
     reply_author = reply['blog_name']
     reply_text = reply['reply_text']
 
@@ -53,6 +53,26 @@ for reply in reply_iter(post_notes):
     else:
         replies[reply_author] = reply_text
 
+print("Counting reblogs...")
+for reblog_note in notes_iter(client, blog, post_id, 'reblog'):
+    reblog_author = reblog_note['blog_name']
+    reblog_post_id = reblog_note['post_id']
+    posts = client.posts(blogname=f"{reblog_author}.tumblr.com", id=reblog_post_id)
+    if 'posts' not in posts:
+        assert posts['meta']['status'] == 404
+        continue
+    reblogs = posts['posts']
+    assert len(reblogs) == 1
+    reblog_post = reblogs[0]
+    reblog_comment = reblog_post['reblog']['comment']
+    if reblog_comment:
+        if reblog_author in replies:
+            replies[reblog_author] += "\n"
+            replies[reblog_author] += reblog_comment
+        else:
+            replies[reblog_author] = reblog_comment
+
+print("Calculating results...")
 choices = config.choices
 regexes = dict()
 defined_replies = dict()
