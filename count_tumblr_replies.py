@@ -50,8 +50,13 @@ def get_post_options(tumblr_client, blogname, post_id):
     parser = PostCaptionParser()
     parser.feed(post_html)
     result = dict()
+    extract_text_regex = re.compile(r"\W*")
     for index, option in enumerate(parser.options):
-        result[str(index + 1)] = option
+        option_number = str(index + 1)
+        result[option_number] = [
+            (option_number, option_number),
+            (option, extract_text_regex.sub("", option).casefold())
+        ]
     return result
 
 
@@ -79,10 +84,12 @@ client = TumblrRestClient(key)
 replies = dict()
 
 
-print("Getting choices...")
+print("Getting initial choices...")
 options = get_post_options(client, blog, post_id)
-for option_number, option_text in options.items():
-    print(f"Choice {option_number}: {option_text}")
+for option_number, option_variants in options.items():
+    print(f"Option {option_number}:")
+    for variant in option_variants:
+        print(f"\t{variant[0]}")
 
 print("\nCounting replies...")
 for reply in notes_iter(client, blog, post_id, 'reply'):
@@ -127,35 +134,42 @@ if config.count_reblogs:
     print(f"{len(replies)} replies to handle")
 
 print("\nCalculating results...")
-regexes = dict()
+extract_text_regex = re.compile(r"\W*")
 defined_replies = dict()
-undefined_replies = []
 
-for number, option_text in options.items():
-    defined_replies[number] = list()
-    assert number not in regexes
-    regexes[number] = re.compile(rf"\W*{number}\W*", re.IGNORECASE)
-    assert option_text not in regexes
-    regexes[option_text] = re.compile(rf"\W*{option_text}\W*", re.IGNORECASE)
+for option_number, option_variants in options.items():
+    defined_replies[option_number] = list()
 
 for author, reply in replies.items():
-    reply_options = list()
-    for number, option_text in options.items():
-        if regexes[number].fullmatch(reply):
-            defined_replies[number].append((reply, author))
-            break
-        if regexes[option_text].fullmatch(reply):
-            defined_replies[number].append((reply, author))
+    clean_reply = extract_text_regex.sub("", reply).casefold()
+    for number, option_variants in options.items():
+        defined_reply = False
+        for variant in option_variants:
+            if clean_reply == variant[1]:
+                defined_replies[number].append((reply, author))
+                defined_reply = True
+                break
+        if defined_reply:
             break
     else:
-        undefined_replies.append((reply, author))
+        reply_option = None
+        while not reply_option:
+            reply_option = input(f"What's the option for '{format_reply(reply)}'?")
+            if reply_option in options:
+                defined_replies[reply_option].append((reply, author))
+                options[reply_option].append((reply, extract_text_regex.sub("", reply)))
+            else:
+                if reply_option != "0":
+                    print(f"Option {reply_option} is not in options")
+                    reply_option = None
 
-print("Results:")
+print("\nUpdated choices:")
+for option_number, option_variants in options.items():
+    print(f"Option {option_number}:")
+    for variant in option_variants:
+        print(f"\t{format_reply(variant[0])}")
+
+print("\nResults:")
 for choice, replies in defined_replies.items():
     if replies:
         print(f'{choice}: {len(replies)}')
-
-if undefined_replies:
-    print("\nUndefined replies:")
-    for reply, author in undefined_replies:
-        print(f"{author}:\n{format_reply(reply)}\n")
