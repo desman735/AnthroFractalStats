@@ -98,32 +98,33 @@ for reply in notes_iter(client, blog, post_id, 'reply'):
         replies[reply_author] = reply_text
 print(f"{len(replies)} replies to handle")
 
-print("\nCounting reblogs...")
-for reblog_note in notes_iter(client, blog, post_id, 'reblog'):
-    reblog_author = reblog_note['blog_name']
-    reblog_post_id = reblog_note['post_id']
-    posts = client.posts(blogname=f"{reblog_author}.tumblr.com", id=reblog_post_id)
-    if 'posts' not in posts:
-        assert posts['meta']['status'] == 404
-        continue
-    reblogs = posts['posts']
-    assert len(reblogs) == 1
-    reblog_post = reblogs[0]
-    reblog_comment = reblog_post['reblog']['comment']
-    if not reblog_comment:
-        continue
-    reblog_comment: str
-    assert reblog_comment.startswith("<p>")
-    assert reblog_comment.endswith("</p>")
-    reblog_comment = reblog_comment[3:-4]
-    if reblog_author in replies:
-        if replies[reply_author] == reply_text:
+if config.count_reblogs:
+    print("\nCounting reblogs...")
+    for reblog_note in notes_iter(client, blog, post_id, 'reblog'):
+        reblog_author = reblog_note['blog_name']
+        reblog_post_id = reblog_note['post_id']
+        posts = client.posts(blogname=f"{reblog_author}.tumblr.com", id=reblog_post_id)
+        if 'posts' not in posts:
+            assert posts['meta']['status'] == 404
             continue
-        replies[reblog_author] += "\n"
-        replies[reblog_author] += reblog_comment
-    else:
-        replies[reblog_author] = reblog_comment
-print(f"{len(replies)} replies to handle")
+        reblogs = posts['posts']
+        assert len(reblogs) == 1
+        reblog_post = reblogs[0]
+        reblog_comment = reblog_post['reblog']['comment']
+        if not reblog_comment:
+            continue
+        reblog_comment: str
+        assert reblog_comment.startswith("<p>")
+        assert reblog_comment.endswith("</p>")
+        reblog_comment = reblog_comment[3:-4]
+        if reblog_author in replies:
+            if replies[reblog_author] == reblog_comment:
+                continue
+            replies[reblog_author] += "\n"
+            replies[reblog_author] += reblog_comment
+        else:
+            replies[reblog_author] = reblog_comment
+    print(f"{len(replies)} replies to handle")
 
 print("\nCalculating results...")
 regexes = dict()
