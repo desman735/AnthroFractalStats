@@ -1,3 +1,4 @@
+import json
 import re
 from html.parser import HTMLParser
 
@@ -43,21 +44,43 @@ def notes_iter(tumblr_client, blogname, notes_post_id, filter_type):
             notes = client.notes(blogname=blog, id=post_id, before_timestamp=last_handled_timestamp)
 
 
+def load_options(post_id):
+    with open(f"options/{post_id}.json", "r", encoding="utf8") as options_file:
+        return json.load(options_file)
+
+
+def save_options(post_id, options):
+    with open(f"options/{post_id}.json", "w", encoding="utf8") as options_file:
+        json.dump(fp=options_file, obj=options, indent="\t", ensure_ascii=False)
+
+
+def print_options(options):
+    for option_number, option_variants in options.items():
+        print(f"Option {option_number}:")
+        for variant in option_variants:
+            print(f"\t{format_reply(variant[0])}")
+
+
 def get_post_options(tumblr_client, blogname, post_id):
-    request = tumblr_client.posts(blogname=blogname, id=post_id)
-    assert len(request['posts']) == 1
-    post_html = request['posts'][0]['caption']
-    parser = PostCaptionParser()
-    parser.feed(post_html)
-    result = dict()
-    extract_text_regex = re.compile(r"\W*")
-    for index, option in enumerate(parser.options):
-        option_number = str(index + 1)
-        result[option_number] = [
-            (option_number, option_number),
-            (option, extract_text_regex.sub("", option).casefold())
-        ]
-    return result
+    try:
+        return load_options(post_id)
+    except FileNotFoundError:
+        request = tumblr_client.posts(blogname=blogname, id=post_id)
+        assert len(request['posts']) == 1
+        post_html = request['posts'][0]['caption']
+        parser = PostCaptionParser()
+        parser.feed(post_html)
+        result = dict()
+        extract_text_regex = re.compile(r"\W*")
+        for index, option in enumerate(parser.options):
+            option_number = str(index + 1)
+            clean_option = extract_text_regex.sub("", option).casefold()
+            result[option_number] = [
+                (option_number, option_number),
+                (option, clean_option),
+                (f"{option_number}. {option}", option_number + clean_option),
+            ]
+        return result
 
 
 def format_reply(line: str) -> str:
@@ -86,10 +109,8 @@ replies = dict()
 
 print("Getting initial choices...")
 options = get_post_options(client, blog, post_id)
-for option_number, option_variants in options.items():
-    print(f"Option {option_number}:")
-    for variant in option_variants:
-        print(f"\t{variant[0]}")
+print_options(options)
+save_options(post_id, options)
 
 print("\nCounting replies...")
 for reply in notes_iter(client, blog, post_id, 'reply'):
@@ -157,17 +178,15 @@ for author, reply in replies.items():
             reply_option = input(f"What's the option for '{format_reply(reply)}'?")
             if reply_option in options:
                 defined_replies[reply_option].append((reply, author))
-                options[reply_option].append((reply, extract_text_regex.sub("", reply)))
+                options[reply_option].append((reply, clean_reply))
             else:
                 if reply_option != "0":
                     print(f"Option {reply_option} is not in options")
                     reply_option = None
 
 print("\nUpdated choices:")
-for option_number, option_variants in options.items():
-    print(f"Option {option_number}:")
-    for variant in option_variants:
-        print(f"\t{format_reply(variant[0])}")
+print_options(options)
+save_options(post_id, options)
 
 print("\nResults:")
 for choice, replies in defined_replies.items():
