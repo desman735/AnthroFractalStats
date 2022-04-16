@@ -97,8 +97,9 @@ class PostOptions:
 
 class PostNotes:
 
-    def __init__(self, tumblr_client, post_link) -> None:
+    def __init__(self, tumblr_client, post_link, mode="conversation") -> None:
         self.client = tumblr_client
+        self.notes_request_mode = mode
 
         post = post_link.removeprefix("https://")
         self.blog, post = post.split('/', 1)
@@ -118,24 +119,20 @@ class PostNotes:
         notes = self.client.notes(
             blogname=self.blog,
             id=self.post_id,
+            mode=self.notes_request_mode,
         )
-        total_notes = notes['total_notes']
+        for note in notes['notes']:
+            self.cached_notes.append(note)
 
-        handled_notes = 0
-        last_handled_timestamp = None
-        while handled_notes < total_notes:
-            assert len(notes) > 0
+        while '_links' in notes:
+            assert 'next' in notes['_links']
+            next_link = notes['_links']['next']
+            notes = self.client.notes(
+                blogname=self.blog,
+                **next_link['query_params']
+            )
             for note in notes['notes']:
-                last_handled_timestamp = note['timestamp']
                 self.cached_notes.append(note)
-            handled_notes += len(notes['notes'])
-
-            if handled_notes < total_notes:
-                notes = self.client.notes(
-                    blogname=self.blog,
-                    id=self.post_id,
-                    before_timestamp=last_handled_timestamp,
-                )
 
     def cache_initial_post(self):
         request = self.client.posts(blogname=self.blog, id=self.post_id)
@@ -164,7 +161,7 @@ CLIENT = TumblrRestClient(CONFIG.tumblr_key)
 
 print("Getting post notes...")
 NOTES = PostNotes(CLIENT, CONFIG.tumblr_post_link)
-print(f"Cached {len(NOTES.cached_notes)} notes")
+print(f"Cached {len(NOTES.cached_notes)} notes ({NOTES.notes_request_mode} mode)")
 
 print("Getting initial choices...")
 OPTIONS = PostOptions(NOTES.initial_post)
@@ -193,6 +190,7 @@ if CONFIG.count_reblogs:
         POSTS = CLIENT.posts(blogname=f"{REBLOG_AUTHOR}.tumblr.com", id=REBLOG_POST_ID)
         if 'posts' not in POSTS:
             assert POSTS['meta']['status'] == 404
+            print(f'Failed to get reblog text from {REBLOG_AUTHOR}')
             continue
         REBLOGS = POSTS['posts']
         assert len(REBLOGS) == 1
