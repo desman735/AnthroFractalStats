@@ -12,21 +12,26 @@ class PostCaptionParser(HTMLParser):
         self.options = list()
         self.handled_list = False
         self.inside_list_option = False
+        self.option_regex = re.compile(r"\d\) ")
 
     def handle_starttag(self, tag, attrs):
         if tag == 'ol':
             assert not self.handled_list
             self.handled_list = True
-        if tag == 'li':
+        elif tag == 'li':
             self.inside_list_option = True
 
     def handle_endtag(self, tag):
         if tag == 'li':
             self.inside_list_option = False
+        elif tag == "p":
+            assert len(self.options) >= 2
 
     def handle_data(self, data):
         if self.inside_list_option:
             self.options.append(data)
+        elif self.option_regex.match(data):
+            self.options.append(data[3:])
 
 
 class PostOptions:
@@ -61,7 +66,7 @@ class PostOptions:
 
     def save_current_options(self):
         # Default "0" and at least two choices
-        assert len(self.options) > 2
+        assert len(self.options) >= 3
         with open(f"options/{self.post_id}.json", "w", encoding="utf8") as options_file:
             json.dump(fp=options_file, obj=self.options, indent="\t", ensure_ascii=False)
 
@@ -224,7 +229,10 @@ for AUTHOR, REPLY in REPLIES.items():
 print("\nUpdated choices:")
 OPTIONS.print_current_options()
 
-print("\nResults:")
-for OPTION, REPLIES in DEFINED_REPLIES.items():
-    if REPLIES and OPTION != "0":
-        print(f'{OPTION}: {len(REPLIES)}')
+print("\nTumblr: " + ", ".join(
+    [
+        f'{OPTION} - {len(REPLIES)}'
+        for OPTION, REPLIES in DEFINED_REPLIES.items()
+        if REPLIES and OPTION != "0"
+    ]
+))
