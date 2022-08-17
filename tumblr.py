@@ -4,7 +4,7 @@ from html.parser import HTMLParser
 
 from pytumblr import TumblrRestClient
 
-from utils import format_reply
+from utils import format_reply, PostVotes
 
 
 class PostCaptionParser(HTMLParser):
@@ -143,17 +143,6 @@ class PostNotes:
         for note in self.cached_notes:
             if not filter_type or note['type'] == filter_type:
                 yield note
-
-
-class PostVotes:
-    def __init__(self, options: [str]):
-        self.votes = dict()
-        for option in options:
-            self.votes[option] = list()
-
-    def add_vote(self, option: str, vote_author: str, vote: str):
-        assert option in self.votes
-        self.votes[option].append((vote, vote_author))
 
 
 class TumblrPost:
