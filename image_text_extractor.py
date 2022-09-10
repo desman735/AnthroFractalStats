@@ -1,3 +1,4 @@
+import math
 import os
 from dataclasses import dataclass
 from typing import Optional, Union, IO
@@ -31,6 +32,27 @@ class ImageBlockDescriptor:
     interlace_flag: bool
     sort_flag: bool
     color_table_size: int
+
+
+def add_comment_to_gif(file_path: str, comment_ascii: str):
+    comment_bytes = comment_ascii.encode('ascii')
+    with open(file_path, "rb") as gif_file:
+        gif_data = gif_file.read()
+    assert gif_data[0:3] == b'GIF'
+    assert gif_data[-1] == 0x3B
+    gif_data = bytearray(gif_data)
+    gif_data[-1] = 0x21  # Extension
+    gif_data.append(0xFE)
+    block_size = 0xFF
+    # break stuff on blocks of specific size bytes, so size byte is not noticeable inside the message
+    for block_idx in range(math.ceil(len(comment_bytes) / block_size)):
+        data_block = comment_bytes[block_idx*block_size:(block_idx + 1) * block_size]
+        gif_data.append(len(data_block))  # might be less than block_size
+        gif_data = gif_data + data_block
+    gif_data.append(0)
+    gif_data.append(0x3B)
+    with open(file_path, "wb") as gif_file:
+        gif_file.write(gif_data)
 
 
 class PageFileParser:
@@ -170,8 +192,6 @@ class PageFileParser:
         entry = self._page_file.read()
         if entry:
             self.station_entry = entry.decode('ascii')
-        else:
-            self.station_entry = "--- NO STATION ENTRY ---"
 
     def _read_data_blocks(self):
         block_size = self._read_next_bytes()
@@ -187,5 +207,6 @@ if __name__ == "__main__":
     for page in os.listdir("pages"):
         print(page)
         parser = PageFileParser(f"pages/{page}")
-        print(parser.station_entry)
+        print(parser.station_entry or "--- NO STATION ENTRY ---")
+        print("")
     print("Done")
