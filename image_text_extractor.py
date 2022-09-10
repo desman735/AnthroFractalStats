@@ -42,15 +42,14 @@ def add_comment_to_gif(file_path: str, comment_ascii: str):
     assert gif_data[-1] == 0x3B
     gif_data = bytearray(gif_data)
     gif_data[-1] = 0x21  # Extension
-    gif_data.append(0xFE)
+    gif_data.append(0xFE)  # Comment extension type
     block_size = 0xFF
-    # break stuff on blocks of specific size bytes, so size byte is not noticeable inside the message
     for block_idx in range(math.ceil(len(comment_bytes) / block_size)):
         data_block = comment_bytes[block_idx*block_size:(block_idx + 1) * block_size]
         gif_data.append(len(data_block))  # might be less than block_size
         gif_data = gif_data + data_block
-    gif_data.append(0)
-    gif_data.append(0x3B)
+    gif_data.append(0)  # end of comment data
+    gif_data.append(0x3B)  # gif end
     with open(file_path, "wb") as gif_file:
         gif_file.write(gif_data)
 
