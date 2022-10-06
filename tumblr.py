@@ -66,13 +66,13 @@ class PostOptions:
             self.__save_current_options()
 
     def __load_saved_options(self):
-        with open(f"options/{self.__post_id}.json", "r", encoding="utf8") as options_file:
+        with open(f"data/{self.__post_id}.json", "r", encoding="utf8") as options_file:
             self.__options = json.load(options_file)
 
     def __save_current_options(self):
         # Default "0" and at least two choices
         assert len(self.__options) >= 3
-        with open(f"options/{self.__post_id}.json", "w", encoding="utf8") as options_file:
+        with open(f"data/{self.__post_id}.json", "w", encoding="utf8") as options_file:
             json.dump(fp=options_file, obj=self.__options, indent="\t", ensure_ascii=False)
 
     def print_current_options(self):
